@@ -100,11 +100,45 @@ features_drop = ['Ticket', 'SibSp', 'Parch']
 train = train.drop(features_drop, axis=1)
 test = test.drop(features_drop, axis=1)
 train = train.drop(['PassengerId'], axis=1)
+train_data = train.drop('Survived', axis=1)
+target = train['Survived']
 
-#kNN
-clf = KNeighborsClassifier(n_neighbors = 13)
-scoring = 'accuracy'
-knnscore = cross_val_score(clf, train_data, target, cv=k_fold, n_jobs=1, scoring=scoring)
+# kNN
+knnclf = KNeighborsClassifier(n_neighbors = 13)
+knnscoring = 'accuracy'
+knnscore = cross_val_score(knnclf, train_data, target, cv=k_fold, n_jobs=1, scoring=knnscoring)
+
+# decision tree
+dcclf = DecisionTreeClassifier()
+dcscoring = 'accuracy'
+dcscore = cross_val_score(dcclf, train_data, target, cv=k_fold, n_jobs=1, scoring=dcscoring)
+
+# naive bayes
+nbclf = GaussianNB()
+nbscoring = 'accuracy'
+nbscore = cross_val_score(nbclf, train_data, target, cv=k_fold, n_jobs=1, scoring=nbscoring)
+
+# svm
+svmclf  = SVC()
+svmscoring  =  'accuracy'
+svmscore = cross_val_score(svmclf, train_data, target, cv=k_fold, n_jobs=1, scoring=svmscoring)
+
+# TESTING
+testclf = SVC()
+testclf.fit(train_data, target)
+
+test_data = test.drop("PassengerId", axis=1).copy()
+prediction = testclf.predict(test_data)
+
+submission = pd.DataFrame({
+        "PassengerId": test["PassengerId"],
+        "Survived": prediction
+    })
+
+submission.to_csv('submission.csv', index=False)
+
+
+submission = pd.read_csv('submission.csv')
 
 ###################### METHODS #############################
 
@@ -142,6 +176,22 @@ def bar_chart(feature):
     df.index = ['Survived', 'Dead']
     df.plot(kind = 'bar', stacked = True, figsize = (10, 5))
 
-def kNNScore():
+def knnScore():
     '''print rounded score from closest neighbor analysis'''
     print(round(np.mean(knnscore)*100, 2))
+
+def dcScore():
+    '''print rouned score from decision tree analysis'''
+    print(round(np.mean(dcscore)*100, 2))
+
+def nbScore():
+    '''print rounded score from naive bayes analysis'''
+    print(round(np.mean(nbscore)*100, 2))
+
+def svmScore():
+    '''print rounded score from svm analysis'''
+    print(round(np.mean(svmscore)*100, 2))
+
+def testResult(numRows):
+    '''predict results of test data'''
+    print(submission.head(numRows))
