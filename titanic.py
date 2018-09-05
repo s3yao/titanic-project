@@ -1,0 +1,225 @@
+# Hello buddiessss lesgetiiii
+# SPIS PROJECT
+# predicting whether or not people will die on the titanic using MACHINE LEARNING 
+
+########################### IMPORTS ################################
+
+# pandas is a library used to analyze data for python :)
+import pandas as pd
+import numpy as np
+# classifier models
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
+#from sklearn.ensemble import RandomForestClassifier# deprecation warning
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.svm import SVC
+from sklearn.model_selection import KFold
+from sklearn.model_selection import cross_val_score
+k_fold = KFold(n_splits=10, shuffle=True, random_state=0)
+
+train = pd.read_csv('train.csv')  # data with whether or not passenger dies
+test = pd.read_csv('test.csv')# data without knowing if passenger dies
+spisTest = pd.read_csv('spisTest1.csv')
+
+listNames = []
+for n in spisTest["Name"]:
+    listNames.append(n)
+print(listNames)
+############################ MODIFY TABLE ###########################
+
+# changing names of passengers to a title ex. Mrs, Mr...
+train_test_data = [train, test, spisTest]     # combining train and test dataset so you can edit both at the same time
+for dataset in train_test_data:
+    dataset['Title'] = dataset['Name'].str.extract(' ([A-Za-z]+)\.', expand = False)
+title_mapping = {'Mr': 0, 'Miss': 1, 'Mrs': 2, 'Master': 3, 'Dr': 3, 'Rev': 3, 'Col': 3, 'Major': 3, 'Mlle': 3,'Countess': 3,
+                 'Ms': 3, 'Lady': 3, 'Jonkheer': 3, 'Don': 3, 'Dona' : 3, 'Mme': 3,'Capt': 3,'Sir': 3}
+for dataset in train_test_data:
+    dataset['Title'] = dataset['Title'].map(title_mapping)
+train.drop('Name', axis = 1, inplace = True)
+test.drop('Name', axis = 1, inplace = True)
+spisTest.drop('Name', axis = 1, inplace = True)
+
+# change gender to a numerical value
+sex_mapping = {"male": 0, "female": 1}
+for dataset in train_test_data:
+    dataset['Sex'] = dataset['Sex'].map(sex_mapping)
+
+# fill missing age with median age for each title (Mr, Mrs, Miss, Others)
+train["Age"].fillna(train.groupby("Title")["Age"].transform("median"), inplace=True)
+test["Age"].fillna(test.groupby("Title")["Age"].transform("median"), inplace=True)
+spisTest["Age"].fillna(test.groupby("Title")["Age"].transform("median"), inplace=True)
+
+# convert numerical age to a categorical value
+# child: 0; young adult: 1; adult: 2; middle aged: 3; senior: 4
+for dataset in train_test_data:
+    dataset.loc[ dataset['Age'] <= 16, 'Age'] = 0,
+    dataset.loc[(dataset['Age'] > 16) & (dataset['Age'] <= 26), 'Age'] = 1,
+    dataset.loc[(dataset['Age'] > 26) & (dataset['Age'] <= 36), 'Age'] = 2,
+    dataset.loc[(dataset['Age'] > 36) & (dataset['Age'] <= 62), 'Age'] = 3,
+    dataset.loc[ dataset['Age'] > 62, 'Age'] = 4
+
+# fills in missing class with with S
+for dataset in train_test_data:
+    dataset['Embarked'] = dataset['Embarked'].fillna('S')
+
+# changes the embark letter to a numeric value
+embarked_mapping = {"S": 0, "C": 1, "Q": 2}
+for dataset in train_test_data:
+    dataset['Embarked'] = dataset['Embarked'].map(embarked_mapping)
+
+# fill missing Fare with median fare for each Pclass
+train["Fare"].fillna(train.groupby("Pclass")["Fare"].transform("median"), inplace=True)
+test["Fare"].fillna(test.groupby("Pclass")["Fare"].transform("median"), inplace=True)
+spisTest["Fare"].fillna(test.groupby("Pclass")["Fare"].transform("median"), inplace=True)
+
+# scales the different fares to a value between 0 and 2
+for dataset in train_test_data:
+    dataset.loc[ dataset['Fare'] <= 17, 'Fare'] = 0,
+    dataset.loc[(dataset['Fare'] > 17) & (dataset['Fare'] <= 30), 'Fare'] = 1,
+    dataset.loc[(dataset['Fare'] > 30) & (dataset['Fare'] <= 100), 'Fare'] = 2,
+    dataset.loc[ dataset['Fare'] > 100, 'Fare'] = 3
+
+# takes the first character in the cabin number and scales the value
+for dataset in train_test_data:
+    dataset['Cabin'] = dataset['Cabin'].str[:1]
+cabin_mapping  = {"A": 0, "B": 0.4, "C": 0.8, "D": 1.2, "E": 1.6, "F": 2, "G": 2.4, "T": 2.8}
+for dataset in train_test_data:
+    dataset['Cabin'] = dataset['Cabin'].map(cabin_mapping)
+train["Cabin"].fillna(train.groupby("Pclass")["Cabin"].transform("median"), inplace=True)
+test["Cabin"].fillna(test.groupby("Pclass")["Cabin"].transform("median"), inplace=True)
+spisTest["Cabin"].fillna(test.groupby("Pclass")["Cabin"].transform("median"), inplace=True)
+
+# combines sibling, spouses, parents, children into family size
+train["FamilySize"] = train["SibSp"] + train["Parch"] + 1
+test["FamilySize"] = test["SibSp"] + test["Parch"] + 1
+spisTest["FamilySize"] = spisTest["SibSp"] + spisTest["Guests"] + 1
+family_mapping = {1: 0, 2: 0.4, 3: 0.8, 4: 1.2, 5: 1.6, 6: 2, 7: 2.4, 8: 2.8, 9: 3.2, 10: 3.6, 11: 4}
+for dataset in train_test_data:
+    dataset['FamilySize'] = dataset['FamilySize'].map(family_mapping)
+
+# drop features that we don't need
+features_drop = ['Ticket', 'SibSp', 'Parch']
+features_drop1 = ['Ticket', 'SibSp', 'Guests']
+train = train.drop(features_drop, axis=1)
+test = test.drop(features_drop, axis=1)
+spisTest = spisTest.drop(features_drop1, axis=1)
+train = train.drop(['PassengerId'], axis=1)
+train_data = train.drop('Survived', axis=1)
+target = train['Survived']
+
+
+# kNN
+knnclf = KNeighborsClassifier(n_neighbors = 13)
+knnscoring = 'accuracy'
+knnscore = cross_val_score(knnclf, train_data, target, cv=k_fold, n_jobs=1, scoring=knnscoring)
+
+# decision tree
+dcclf = DecisionTreeClassifier()
+dcscoring = 'accuracy'
+dcscore = cross_val_score(dcclf, train_data, target, cv=k_fold, n_jobs=1, scoring=dcscoring)
+
+# naive bayes
+nbclf = GaussianNB()
+nbscoring = 'accuracy'
+nbscore = cross_val_score(nbclf, train_data, target, cv=k_fold, n_jobs=1, scoring=nbscoring)
+
+# svm
+svmclf  = SVC()
+svmscoring  =  'accuracy'
+svmscore = cross_val_score(svmclf, train_data, target, cv=k_fold, n_jobs=1, scoring=svmscoring)
+
+# TESTING
+testclf = SVC()
+testclf.fit(train_data, target)
+
+test_data = test.drop("PassengerId", axis=1).copy()
+spisTest_data = spisTest.drop("PassengerId", axis=1).copy()
+prediction = testclf.predict(test_data)
+print(spisTest_data)
+prediction1 = testclf.predict(spisTest_data)
+
+submission = pd.DataFrame({
+        "Name": listNames,
+        "Survived": prediction1
+    })
+
+ogSubmission = pd.DataFrame({
+        "PassengerId": test["PassengerId"],
+        "Survived": prediction
+    })
+
+ogSubmission.to_csv('ogSubmission.csv', index=False)
+submission.to_csv('submission.csv', index=False)
+
+submission = pd.read_csv('submission.csv')
+ogSubmission = pd.read_csv('ogSubmission.csv')
+
+###################### METHODS #############################
+
+def getTitles():
+    '''get titles?'''
+
+    print(train['Title'].value_counts())
+    print(test['Title'].value_counts())
+    print(spisTest['Title'].value_counts())
+
+def printHead(numRows):
+    '''uses .head(numRows) to see values in dataset'''
+    print(train.head(numRows))
+    print(test.head(numRows))
+    print(spisTest.head(numRows))
+
+def printShape():
+    '''.shape gives size of table'''
+    print(train.shape)
+    print(test.shape)
+    print(spisTest.shape)
+
+def printInfo():
+    '''.info() gives the amount of non null values in each column'''
+    print(train.info())
+    print(test.info())
+    print(spisTest.info())
+
+def nullVals():
+    '''uses .isnull().sum() method to get number of null values in each column'''
+    print(train.isnull().sum())
+    print(test.isnull().sum())
+    print(spisTest.isnull().sum())
+
+# creates bar graph of a certain column of data
+# not working idk
+def bar_chart(feature):
+    survived = train[train['Survived'] == 1][feature].value_counts()
+    dead = train[train['Survived'] == 0][feature].value_counts()
+    df = pd.DataFrame([survived, dead])
+    df.index = ['Survived', 'Dead']
+    df.plot(kind = 'bar', stacked = True, figsize = (10, 5))
+
+def knnScore():
+    '''print rounded score from closest neighbor analysis'''
+    print(round(np.mean(knnscore)*100, 2))
+
+def dcScore():
+    '''print rouned score from decision tree analysis'''
+    print(round(np.mean(dcscore)*100, 2))
+
+def nbScore():
+    '''print rounded score from naive bayes analysis'''
+    print(round(np.mean(nbscore)*100, 2))
+
+def svmScore():
+    '''print rounded score from svm analysis'''
+    
+    print(round(np.mean(svmscore*100, 2)))
+
+def testResult(numRows):
+    '''predict results of SPIS test data'''
+    print(submission.head(numRows))
+
+def ogtestResult(numRows):
+    '''predict results of original test data'''
+    print(ogSubmission.head(numRows))
+#df = pd.read_csv('test.csv') 
+#print(df)
